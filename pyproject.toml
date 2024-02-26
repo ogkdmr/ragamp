@@ -3,13 +3,13 @@ requires = ["setuptools>=64.0", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "foobar"
+name = "ragamp"
 version = "0.1.0"
 authors = [
-    {name = "foobar author"},
-    {email = "foobar@foobar.com"},
+    {name = "Ozan Gokdemir"},
+    {email = "ogokdemir@uchicago.edu"},
 ]
-description = "Foobar example package."
+description = "Retrieval Augmented Generation for Antimicrobial Peptides."
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
@@ -24,9 +24,9 @@ dependencies = [
 ]
 
 [project.urls]
-homepage = "https://github.com/foobar-author/foobar"
-documentation = "https://foobar.readthedocs.io"
-repository = "https://github.com/foobar-author/foobar"
+homepage = "https://github.com/ogkdmr/ragamp"
+documentation = "https://ogkdmr.github.io/ragamp/"
+repository = "https://github.com/ogkdmr/ragamp"
 
 [project.optional-dependencies]
 dev = [
@@ -147,7 +147,7 @@ multiline-quotes = "single"
 
 [tool.ruff.lint.isort]
 force-single-line = true
-known-first-party = ["foobar", "test", "testing"]
+known-first-party = ["ragamp", "test", "testing"]
 order-by-type = false
 required-imports = ["from __future__ import annotations"]
 

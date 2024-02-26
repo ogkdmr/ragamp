@@ -1,12 +1,12 @@
-site_name: Python Template
-site_url: https://gpauloski.github.io/python-template
-site_author: FooBar Author
-site_description: Documentation for FooBar.
+site_name: "RagAmp: Retrieval-Augmented Generation for Antimicrobial Peptides"
+site_url: https://ogkdmr.github.io/ragamp/
+site_author: Ozan Gokdemir
+site_description: Documentation for RagAmp
 
-repo_name: gpauloski/python-template
-repo_url: https://github.com/gpauloski/python-template
+repo_name: ogkdmr/ragamp
+repo_url: https://github.com/ogkdmr/ragamp
 
-copyright: Copyright &copy; 2023—Present FooBar Authors
+copyright: Copyright &copy; 2023—Present Ozan Gokdemir
 
 theme:
   name: material
@@ -61,7 +61,7 @@ watch:
   - mkdocs.yml
   - README.md
   - docs/
-  - foobar/
+  - ragamp/
 
 extra:
   version:
@@ -90,8 +90,8 @@ markdown_extensions:
   - pymdownx.keys
   - pymdownx.magiclink:
       repo_url_shorthand: true
-      user: foobar-author
-      repo: foobar
+      user: ogkdmr
+      repo: ragamp
   - pymdownx.mark
   - pymdownx.smartsymbols
   - pymdownx.snippets:
@@ -109,7 +109,7 @@ nav:
       - Get Started: get-started.md
       - Examples: examples.md
       - Known Issues: known-issues.md
-      - Changelog (GitHub): https://github.com/gpauloski/python-template/releases
+      - Changelog (GitHub): https://github.com/ogkdmr/ragamp/releases
   - Guides:
       - guides/index.md
       - Example: guides/example.md
