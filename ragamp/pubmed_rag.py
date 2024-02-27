@@ -17,14 +17,14 @@ import sys
 
 import torch
 from langchain.embeddings.huggingface import HuggingFaceBgeEmbeddings
-from llama_index import load_index_from_storage
-from llama_index import ServiceContext
-from llama_index import set_global_service_context
-from llama_index import SimpleDirectoryReader
-from llama_index import StorageContext
-from llama_index import VectorStoreIndex
-from llama_index.llms import HuggingFaceLLM
-from llama_index.prompts import PromptTemplate
+from llama_index.core import set_global_service_context
+from llama_index.core import SimpleDirectoryReader
+from llama_index.core import VectorStoreIndex
+from llama_index.core.indices.loading import load_index_from_storage
+from llama_index.core.indices.service_context import ServiceContext
+from llama_index.core.prompts.base import PromptTemplate
+from llama_index.core.storage.storage_context import StorageContext
+from llama_index.llms.huggingface import HuggingFaceLLM
 from tqdm import tqdm
 from transformers import BitsAndBytesConfig
 
