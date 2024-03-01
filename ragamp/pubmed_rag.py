@@ -17,18 +17,17 @@ import sys
 
 import torch
 from langchain.embeddings.huggingface import HuggingFaceBgeEmbeddings
-from llama_index.core import set_global_service_context
 from llama_index.core import SimpleDirectoryReader
 from llama_index.core import VectorStoreIndex
 from llama_index.core.indices.loading import load_index_from_storage
-from llama_index.core.indices.service_context import ServiceContext
 from llama_index.core.prompts.base import PromptTemplate
 from llama_index.core.storage.storage_context import StorageContext
 from llama_index.llms.huggingface import HuggingFaceLLM
 from tqdm import tqdm
-from transformers import BitsAndBytesConfig
 
-os.environ['HF_HOME'] = '/lambda_stor/data/ogokdemir/transformers_cache'
+os.environ['HF_HOME'] = '/lus/eagle/projects/LUCID/ogokdemir/hf_cache'
+from transformers import BitsAndBytesConfig  # noqa
+
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
@@ -59,81 +58,35 @@ llm = HuggingFaceLLM(
     device_map='auto',
 )
 
-embed_model = HuggingFaceBgeEmbeddings(
-    model_name='dmis-lab/biobert-base-cased-v1.1',
+# TODO: pritamdeka/S-PubMedBert-MS-MARCO, look into this encoder alternative.
+
+encoder = HuggingFaceBgeEmbeddings(
+    model_name='pritamdeka/S-PubMedBert-MS-MARCO',
 )
 
-service_context = ServiceContext.from_defaults(
-    llm=llm,
-    embed_model=embed_model,
-)
-
-set_global_service_context(service_context)
-
-PERSIST_DIR = 'data/vectorstores'
+PERSIST_DIR = '/lus/eagle/projects/LUCID/ogokdemir/ragamp/indexes/amp_index/'
+AMP_PAPERS_DIR = '/lus/eagle/projects/candle_aesp/ogokdemir/pdfwf_runs/AmpParsedDocs/md_outs/'  # noqa
+QUERY_AMPS_DIR = '/home/ogokdemir/ragamp/examples/antimicrobial_peptides.txt'
 
 if not osp.exists(PERSIST_DIR):
     logging.info('Creating index from scratch')
-    documents = SimpleDirectoryReader('data/pmc').load_data()
-    index = VectorStoreIndex.from_documents(documents, show_progress=True)
+    documents = SimpleDirectoryReader(AMP_PAPERS_DIR).load_data()
+    index = VectorStoreIndex.from_documents(
+        documents,
+        embed_model=encoder,
+        show_progress=True,
+    )
     index.storage_context.persist(PERSIST_DIR)
 else:
     logging.info('Loading index from storage')
     storage_context = StorageContext.from_defaults(persist_dir=PERSIST_DIR)
     index = load_index_from_storage(storage_context)
 
-query_engine = index.as_query_engine()
+query_engine = index.as_query_engine(llm=llm)
 logging.info('Query engine ready, running inference')
 
-amps = [
-    'Amoebapore A',
-    'BACTENECIN 5',
-    'CCL20',
-    'DEFB118',
-    'Drosomycin',
-    'Eotaxin2',
-    'Gm cecropin A',
-    'Human alphasynuclein',
-    'Human granulysin',
-    'Microcin B',
-    'Microcin S',
-    'NLP31',
-    'Amoebapore B',
-    'BACTENECIN 7',
-    'CXCL2',
-    'DEFB24',
-    'Drosomycin2',
-    'Eotaxin3',
-    'Gm cecropin B',
-    'Human beta defensin 2',
-    'Human histatin 9',
-    'Microcin C7',
-    'Microcin V',
-    'Peptide 2',
-    'Amoebapore C',
-    'CAP18',
-    'CXCL3',
-    'Defensin 1',
-    'Drosophila cecropin B',
-    'EP2',
-    'Gm cecropin C',
-    'Human beta defensin 3',
-    'Human TC2',
-    'Microcin L',
-    'NLP27',
-    'Peptide 5',
-    'Bactenecin',
-    'Cathepsin G',
-    'CXCL6',
-    'Dermcidin',
-    'Elafin',
-    'FGG',
-    'Gm defensinlike peptide',
-    'Human beta defensin 4',
-    'LL23',
-    'Microcin M',
-    'NLP29',
-]
+with open(QUERY_AMPS_DIR) as f:
+    amps = f.read().splitlines()
 
 q2r = {}
 for amp in tqdm(amps, desc='Querying', total=len(amps)):
@@ -144,5 +97,5 @@ for amp in tqdm(amps, desc='Querying', total=len(amps)):
 with open('data/query_responses_strains.json', 'w') as f:
     json.dump(q2r, f)
 
-# TODO: Find a way to customize the number of documents returned by
-# the query engine. Currently, it returns 10 documents by default.
+# TODO: Move dataloading and encoding to functions and parallelize them.
+# TODO: Once that is done, build the index directly from the embeddings.

@@ -1,0 +1,47 @@
+Amoebapore A
+BACTENECIN 5
+CCL20
+DEFB118
+Drosomycin
+Eotaxin2
+Gm cecropin A
+Human alphasynuclein
+Human granulysin
+Microcin B
+Microcin S
+NLP31
+Amoebapore B
+BACTENECIN 7
+CXCL2
+DEFB24
+Drosomycin2
+Eotaxin3
+Gm cecropin B
+Human beta defensin 2
+Human histatin 9
+Microcin C7
+Microcin V
+Peptide 2
+Amoebapore C
+CAP18
+CXCL3
+Defensin 1
+Drosophila cecropin B
+EP2
+Gm cecropin C
+Human beta defensin 3
+Human TC2
+Microcin L
+NLP27
+Peptide 5
+Bactenecin
+Cathepsin G
+CXCL6
+Dermcidin
+Elafin
+FGG
+Gm defensinlike peptide
+Human beta defensin 4
+LL23
+Microcin M
+NLP29
