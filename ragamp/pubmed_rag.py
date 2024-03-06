@@ -25,8 +25,8 @@ from llama_index.core.storage.storage_context import StorageContext
 from llama_index.llms.huggingface import HuggingFaceLLM
 from tqdm import tqdm
 
-os.environ['HF_HOME'] = '/lus/eagle/projects/LUCID/ogokdemir/hf_cache'
-from transformers import BitsAndBytesConfig  # noqa
+# os.environ["HF_HOME"] = "/lus/eagle/projects/LUCID/ogokdemir/hf_cache"
+from transformers import BitsAndBytesConfig
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
@@ -58,8 +58,6 @@ llm = HuggingFaceLLM(
     device_map='auto',
 )
 
-# TODO: pritamdeka/S-PubMedBert-MS-MARCO, look into this encoder alternative.
-
 encoder = HuggingFaceBgeEmbeddings(
     model_name='pritamdeka/S-PubMedBert-MS-MARCO',
 )
@@ -67,6 +65,7 @@ encoder = HuggingFaceBgeEmbeddings(
 PERSIST_DIR = '/lus/eagle/projects/LUCID/ogokdemir/ragamp/indexes/amp_index/'
 AMP_PAPERS_DIR = '/lus/eagle/projects/candle_aesp/ogokdemir/pdfwf_runs/AmpParsedDocs/md_outs/'  # noqa
 QUERY_AMPS_DIR = '/home/ogokdemir/ragamp/examples/antimicrobial_peptides.txt'
+OUTPUT_DIR = '/lus/eagle/projects/LUCID/ogokdemir/ragamp/outputs/amp_output/template_4.json'  # noqa
 
 if not osp.exists(PERSIST_DIR):
     logging.info('Creating index from scratch')
@@ -74,13 +73,14 @@ if not osp.exists(PERSIST_DIR):
     index = VectorStoreIndex.from_documents(
         documents,
         embed_model=encoder,
+        insert_batch_size=16384,
         show_progress=True,
     )
     index.storage_context.persist(PERSIST_DIR)
 else:
     logging.info('Loading index from storage')
     storage_context = StorageContext.from_defaults(persist_dir=PERSIST_DIR)
-    index = load_index_from_storage(storage_context)
+    index = load_index_from_storage(storage_context, embed_model=encoder)
 
 query_engine = index.as_query_engine(llm=llm)
 logging.info('Query engine ready, running inference')
@@ -90,11 +90,14 @@ with open(QUERY_AMPS_DIR) as f:
 
 q2r = {}
 for amp in tqdm(amps, desc='Querying', total=len(amps)):
-    query = f'What bacterial strains does {amp} act on?.'
+    query = f'What cellular processes does {amp} disrupt?'
     response = query_engine.query(query)
     q2r[amp] = str(response)
 
-with open('data/query_responses_strains.json', 'w') as f:
+
+os.makedirs(osp.dirname(OUTPUT_DIR), exist_ok=True)
+
+with open(OUTPUT_DIR, 'w') as f:
     json.dump(q2r, f)
 
 # TODO: Move dataloading and encoding to functions and parallelize them.
