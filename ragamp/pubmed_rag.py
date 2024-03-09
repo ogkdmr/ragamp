@@ -14,26 +14,35 @@ import logging
 import os
 import os.path as osp
 import sys
+import time
+from concurrent.futures import as_completed
+from concurrent.futures import ThreadPoolExecutor
 
 import torch
 from llama_index.core import SimpleDirectoryReader
 from llama_index.core import VectorStoreIndex
+from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.core.indices.loading import load_index_from_storage
 from llama_index.core.node_parser import SemanticSplitterNodeParser
+from llama_index.core.node_parser.interface import NodeParser
 from llama_index.core.prompts.base import PromptTemplate
+from llama_index.core.schema import BaseNode
+from llama_index.core.schema import Document
+from llama_index.core.storage.docstore import SimpleDocumentStore
+from llama_index.core.storage.index_store import SimpleIndexStore
 from llama_index.core.storage.storage_context import StorageContext
+from llama_index.core.vector_stores import SimpleVectorStore
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.huggingface import HuggingFaceLLM
 from transformers import BitsAndBytesConfig
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
-logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
 
-PERSIST_DIR = '/lus/eagle/projects/LUCID/ogokdemir/ragamp/indexes/lucid_index/'
-PAPERS_DIR = '/lus/eagle/projects/LUCID/ogokdemir/parsed_lucid_papers/md_outs'
-QUERY_AMPS_DIR = '/home/ogokdemir/ragamp/examples/with_no_int.txt'
-OUTPUT_DIR = '/lus/eagle/projects/LUCID/ogokdemir/ragamp/outputs/lucid/'
+PERSIST_DIR = '/home/ac.ogokdemir/lucid_index'
+PAPERS_DIR = '/rbstor/ac.ogokdemir/md_outs'
+QUERY_DIR = '/home/ogokdemir/ragamp/examples/lucid_queries.txt'
+OUTPUT_DIR = '/rbstor/ac.ogokdemir/ragamp/output/lucid/'
 NODE_INFO_PATH = osp.join(OUTPUT_DIR, 'node_info.jsonl')
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -45,9 +54,30 @@ quantization_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,
 )
 
-llm = HuggingFaceLLM(
-    model_name='mistralai/Mistral-7B-Instruct-v0.1',
-    tokenizer_name='mistralai/Mistral-7B-Instruct-v0.1',
+# TODO: Move the generator and encoder factories out.
+
+# mistral7b = HuggingFaceLLM(
+#     model_name="mistralai/Mistral-7B-Instruct-v0.1",
+#     tokenizer_name="mistralai/Mistral-7B-Instruct-v0.1",
+#     query_wrapper_prompt=PromptTemplate(
+#         "<s>[INST] {query_str} [/INST] </s>\n",
+#     ),
+#     context_window=32000,
+#     max_new_tokens=1024,
+#     model_kwargs={"quantization_config": quantization_config},
+#     # tokenizer_kwargs={},
+#     generate_kwargs={
+#         "temperature": 0.2,
+#         "top_k": 5,
+#         "top_p": 0.95,
+#         "do_sample": True,
+#     },
+#     device_map="auto",
+# )
+
+mixtral8x7b = HuggingFaceLLM(
+    model_name='mistralai/Mixtral-8x7B-v0.1',
+    tokenizer_name='mistralai/Mixtral-8x7B-v0.1',
     query_wrapper_prompt=PromptTemplate(
         '<s>[INST] {query_str} [/INST] </s>\n',
     ),
@@ -64,29 +94,63 @@ llm = HuggingFaceLLM(
     device_map='auto',
 )
 
-encoder = HuggingFaceEmbedding(
-    model_name='pritamdeka/S-PubMedBert-MS-MARCO',
-    tokenizer_name='pritamdeka/S-PubMedBert-MS-MARCO',
-    max_length=512,
-    embed_batch_size=64,
-    cache_folder='/lus/eagle/projects/LUCID/ogokdemir/hf_cache',
-    device='cuda',
-)
 
-splitter = SemanticSplitterNodeParser(
-    buffer_size=1,
-    include_metadata=True,
-    embed_model=encoder,
-)
+# indexer = encoder + chunker.
+def get_encoder(device: int = 0) -> BaseEmbedding:
+    """Get the encoder for the vector store index."""
+    return HuggingFaceEmbedding(
+        model_name='pritamdeka/S-PubMedBert-MS-MARCO',
+        tokenizer_name='pritamdeka/S-PubMedBert-MS-MARCO',
+        max_length=512,
+        embed_batch_size=64,
+        cache_folder=os.environ.get('HF_HOME'),
+        device=f'cuda:{device}',
+    )
+
+
+def get_splitter(encoder: BaseEmbedding) -> NodeParser:
+    """Get the splitter for the vector store index."""
+    return SemanticSplitterNodeParser(
+        buffer_size=1,
+        include_metadata=True,
+        embed_model=encoder,
+    )
+
+
+def chunk_encode_unit(device: int, docs: list[Document]) -> list[BaseNode]:
+    """Encode documents using the given embedding model."""
+    # create the encoder
+    encoder = get_encoder(device)
+    splitter = get_splitter(encoder)
+    return splitter.get_nodes_from_documents(docs)
+
+
+def chunk_encode_parallel(
+    docs: list[Document],
+    num_workers: int = 8,
+) -> list[BaseNode]:
+    """Encode documents in parallel using the given embedding model."""
+    batches = [(i, docs[i::num_workers]) for i in range(num_workers)]
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        futures = [
+            executor.submit(chunk_encode_unit, device, docs)  #
+            for device, docs in batches
+        ]
+        results = [future.result() for future in as_completed(futures)]
+
+    return [node for result in results for node in result]
+
 
 if not osp.exists(PERSIST_DIR):
     logging.info('Creating index from scratch')
 
+    start = time.time()
     documents = SimpleDirectoryReader(PAPERS_DIR).load_data()
+    end = time.time()
 
-    # TODO: Parallelize the call below to get_nodes_from_docs to all GPUS.
+    logging.info(f'Loaded documents in {end - start} seconds.')
 
-    nodes = splitter.get_nodes_from_documents(documents, show_progress=True)
+    nodes = chunk_encode_parallel(documents, num_workers=8)
 
     # Code for visually inspecting the success of semantic chunking.
     with open(NODE_INFO_PATH, 'w') as f:
@@ -100,7 +164,7 @@ if not osp.exists(PERSIST_DIR):
 
     index = VectorStoreIndex(
         nodes,
-        embed_model='local',
+        embed_model=get_encoder(),  # for now,this has to be serial
         insert_batch_size=16384,
         show_progress=True,
         use_async=True,
@@ -108,49 +172,38 @@ if not osp.exists(PERSIST_DIR):
 
     os.makedirs(PERSIST_DIR)
     index.storage_context.persist(PERSIST_DIR)
-    logging.info('Saving the first 100 node content for investigation')
+    logging.info(f'Saved the new index to {PERSIST_DIR}')
 
 else:
     logging.info('Loading index from storage')
-    storage_context = StorageContext.from_defaults(persist_dir=PERSIST_DIR)
-    index = load_index_from_storage(storage_context, embed_model=encoder)
+    storage_context = StorageContext.from_defaults(
+        docstore=SimpleDocumentStore.from_persist_dir(PERSIST_DIR),
+        vector_store=SimpleVectorStore.from_persist_dir(
+            PERSIST_DIR,
+            namespace='default',
+        ),
+        index_store=SimpleIndexStore.from_persist_dir(PERSIST_DIR),
+    )
+    index = load_index_from_storage(storage_context, embed_model=get_encoder())
 
-logging.info('Built and saved the semantically chunked LUCID index.')
+    logging.info(f'Loaded the index from {PERSIST_DIR}.')
 
 # TODO: Add these query engine information in a config file.
 query_engine = index.as_query_engine(
-    llm=llm,
+    llm=mixtral8x7b,
     similarity_top_k=10,
     similarity_threshold=0.5,
 )
 
 logging.info('Query engine ready, running inference')
 
-with open(QUERY_AMPS_DIR) as f:
-    amps = f.read().splitlines()
+with open(QUERY_DIR) as f:
+    queries = f.read().splitlines()
 
-PROMPTS = [
-    'What bacterial strains does {} act on?',
-    'What are the likely mechanism of actions the {} has?',
-    'What are the gene targets of {}?',
-    'What cellular processes does {} disrupt?',
-]
+query_2_response = {}
 
-# create a dictionary of dictionaries
-q2r = {}
+for query in queries:
+    query_2_response[query] = query_engine.query(query)
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-for rank, prompt in enumerate(PROMPTS, 1):
-    for amp in amps:
-        query = prompt.format(amp)
-        response = query_engine.query(query)
-        q2r[amp] = str(response)
-
-    out_filepath = osp.join(OUTPUT_DIR, f'template_{rank}.json')
-    with open(out_filepath, 'w') as f:
-        json.dump(q2r, f)
-    q2r = {}
-
-# TODO: Move dataloading and encoding to functions and parallelize them.
-# TODO: Once that is done, build the index directly from the embeddings.
+with open(osp.join(OUTPUT_DIR, 'query_responses.json'), 'w') as f:
+    json.dump(query_2_response, f)
