@@ -21,7 +21,6 @@ from concurrent.futures import ThreadPoolExecutor
 import faiss
 import torch
 from llama_index.core import get_response_synthesizer
-from llama_index.core import PromptTemplate
 from llama_index.core import SimpleDirectoryReader
 from llama_index.core import VectorStoreIndex
 from llama_index.core.base.embeddings.base import BaseEmbedding
@@ -29,8 +28,7 @@ from llama_index.core.indices.loading import load_index_from_storage
 from llama_index.core.indices.prompt_helper import PromptHelper
 from llama_index.core.node_parser import SemanticSplitterNodeParser
 from llama_index.core.node_parser.interface import NodeParser
-from llama_index.core.postprocessor import SimilarityPostprocessor
-from llama_index.core.query_engine import RetrieverQueryEngine
+from llama_index.core.prompts import PromptTemplate
 from llama_index.core.response_synthesizers import ResponseMode
 from llama_index.core.retrievers import VectorIndexRetriever
 from llama_index.core.schema import BaseNode
@@ -44,10 +42,10 @@ from transformers import BitsAndBytesConfig
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 
-PERSIST_DIR = '/rbstor/ac.ogokdemir/ragamp/all_lucid/faiss_index'
+PERSIST_DIR = '/rbstor/ac.ogokdemir/ragamp/indexes/lucid/faiss_index'
 PAPERS_DIR = '/rbstor/ac.ogokdemir/md_outs'
-QUERY_DIR = '/home/ac.ogokdemir/ragamp/examples/lucid_queries.txt'
-OUTPUT_DIR = '/rbstor/ac.ogokdemir/ragamp/output/all_lucid'
+QUERY_DIR = '/home/ac.ogokdemir/ragamp/examples/hypo_ol_parsed.jsonl'
+OUTPUT_DIR = '/rbstor/ac.ogokdemir/ragamp/output/lucid_hypo_eval'
 NODE_INFO_PATH = osp.join(OUTPUT_DIR, 'node_info.jsonl')
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -60,14 +58,14 @@ quantization_config = BitsAndBytesConfig(
 )
 
 # TODO: Move the generator and encoder creation to factory functions.
-# Create BaseGenerator and BaseEncoder interfaces
+# Create BaseGenerator and BaseEncoder interfaces make them take config.
 
 # mistral7b = HuggingFaceLLM(
 #     model_name="mistralai/Mistral-7B-Instruct-v0.1",
 #     tokenizer_name="mistralai/Mistral-7B-Instruct-v0.1",
-#     query_wrapper_prompt=PromptTemplate(
-#         "<s>[INST] {query_str} [/INST] </s>\n",
-#     ),
+#     # query_wrapper_prompt=PromptTemplate(
+#     #     "<s>[INST] {query_str} [/INST] </s>\n",
+#     # ),
 #     context_window=32000,
 #     max_new_tokens=1024,
 #     model_kwargs={"quantization_config": quantization_config},
@@ -81,21 +79,21 @@ quantization_config = BitsAndBytesConfig(
 #     device_map="auto",
 # )
 
+
 mixtral8x7b = HuggingFaceLLM(
-    model_name='mistralai/Mixtral-8x7B-v0.1',
-    tokenizer_name='mistralai/Mixtral-8x7B-v0.1',
+    model_name='mistralai/Mixtral-8x7B-Instruct-v0.1',
+    tokenizer_name='mistralai/Mixtral-8x7B-Instruct-v0.1',
+    context_window=32000,
+    max_new_tokens=4096,
     query_wrapper_prompt=PromptTemplate(
         '<s>[INST] {query_str} [/INST] </s>\n',
     ),
-    context_window=32000,
-    max_new_tokens=2048,
     model_kwargs={'quantization_config': quantization_config},
-    # tokenizer_kwargs={},
     generate_kwargs={
         'temperature': 0.2,
         'top_k': 5,
         'top_p': 0.95,
-        'do_sample': True,
+        'do_sample': False,
     },
     device_map='auto',
 )
@@ -233,15 +231,20 @@ else:
 
 # TODO: Refactor these into query_engine creation and inference.
 
+
+# Creating the query engine.
+retriever = VectorIndexRetriever(
+    index, embed_model=get_encoder(), similarity_top_k=30
+)
+
 ldr_prompt_template_str = (
-    """You are a super smart AI that knows about science. You follow
+    """<s> [INST] You are a super smart AI that knows about science. You follow
     directions and you are always truthful and concise in your responses.
-    Below is an hypothesis submitted to your consideration.\n
-    """
+    Below is an hypothesis submitted to your consideration.\n"""
     '---------------------\n'
     'Hypothesis: {query_str}\n'
     '---------------------\n'
-    'Below is some context provided to assist you in your analysis.'
+    'Below is some context provided to assist you in your analysis.\n'
     '---------------------\n'
     'Context: {context_str}\n'
     '---------------------\n'
@@ -254,14 +257,13 @@ ldr_prompt_template_str = (
        or proteins and their interactions. It is okay to speculate as long as
        you give reasons for your conjectures. Finally, please estimate to the
        best of your knowledge the likelihood of the hypothesis being true, and
-       please give step by step reasoning for your answers. \n"""
-    'Answer: '
+       please give step by step reasoning for your answers.
+       Answer:  [/INST] </s>"""
+    ''
 )
 
 ldr_prompt_template = PromptTemplate(ldr_prompt_template_str)
 
-# Creating the query engine.
-retriever = VectorIndexRetriever(index, similarity_top_k=30)
 
 prompt_helper = PromptHelper(
     context_window=32000,
@@ -272,32 +274,70 @@ prompt_helper = PromptHelper(
 response_synthesizer = get_response_synthesizer(
     llm=mixtral8x7b,
     response_mode=ResponseMode.COMPACT,
-    prompt_helper=prompt_helper,
+    # prompt_helper=prompt_helper,
     text_qa_template=ldr_prompt_template,
 )
 
-query_engine = RetrieverQueryEngine(
-    retriever=retriever,
-    node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.7)],
-    response_synthesizer=response_synthesizer,
+# query_engine = RetrieverQueryEngine(
+#     retriever=retriever,
+#     node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.7)],
+#     response_synthesizer=response_synthesizer,
+# )
+
+# print(query_engine.query("What is the meaning of life?"))
+qe = index.as_query_engine(
+    llm=mixtral8x7b,
+    similarity_top_k=5,
+    response_mode=ResponseMode.COMPACT,
+    # prompt_helper=prompt_helper,
+    text_qa_template=ldr_prompt_template,
+    # response_synthesizer=response_synthesizer,
+    # node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.2)],
 )
 
-
 logging.info('Query engine ready, running inference')
+response = qe.query(
+    """The hypothesis in this study is that low doses of X-rays can induce
+        a repair mechanism in human lymphocytes. This mechanism reduces
+        the number of broken chromosome ends that can take part in aberration
+        formation,even in the case of high-LET radiation from radon. This
+        adaptive response is suggested to be a general phenomenon, not
+        specific to X-rays, and potentially applicable to other types of
+        radiation. The hypothesis is tested through experiments involving
+        different types of radiation, varying doses and timing of low-dose
+        X-ray exposure, and examining different cell types."""
+)
 
-with open(QUERY_DIR) as f:
-    queries = f.read().splitlines()
+print(response.response)
+print('-' * 20)
+print(response.metadata)
+print('-' * 20)
+print(response.source_nodes)
+print('-' * 20)
 
-query_2_response = {}
+sys.exit()
 
-for query in queries[:2]:
-    response = query_engine.query(query)
-    query_2_response[query] = {
-        'response': str(response.response),
-        'metadata': str(response.metadata),
-        'source_nodes': str(response.source_nodes),
-    }
+# # TODO: Make this query processing a generic function.
 
+# with open(QUERY_DIR) as f:
+#     queries = [json.loads(line) for line in f.readlines()]
+#     for query in queries:
+#         question = query['output']  # e.g., hypothesis
+#         query_source_file = query['source']
+#         response_dict = query_engine.query(question)
+#         answer = response_dict.response  # type: ignore
+#         metadata = response_dict.metadata
+#         context_sources = response_dict.source_nodes
 
-with open(osp.join(OUTPUT_DIR, 'query_responses.json'), 'w') as f:
-    json.dump(query_2_response, f)
+#         out = {
+#             'query': question,
+#             'query_source_file': query_source_file,
+#             'response': answer,
+#             'metadata': metadata,
+#             'source_nodes': context_sources,
+#         }
+
+#         with open(
+#           osp.join(OUTPUT_DIR, f'{query_source_file}_hypo_ol_rag.json'), 'w'
+#         ) as f:
+#             json.dump(out, f)
