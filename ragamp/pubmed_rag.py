@@ -296,26 +296,36 @@ qe = index.as_query_engine(
 )
 
 logging.info('Query engine ready, running inference')
-response = qe.query(
-    """The hypothesis in this study is that low doses of X-rays can induce
-        a repair mechanism in human lymphocytes. This mechanism reduces
-        the number of broken chromosome ends that can take part in aberration
-        formation,even in the case of high-LET radiation from radon. This
-        adaptive response is suggested to be a general phenomenon, not
-        specific to X-rays, and potentially applicable to other types of
-        radiation. The hypothesis is tested through experiments involving
-        different types of radiation, varying doses and timing of low-dose
-        X-ray exposure, and examining different cell types."""
-)
 
-print(response.response)
-print('-' * 20)
-print(response.metadata)
-print('-' * 20)
-print(response.source_nodes)
-print('-' * 20)
+with open(QUERY_DIR) as f:
+    for line in f:
+        query = json.loads(line)
+        question = query['output']
+        dest = query['source']
 
-sys.exit()
+        response = qe.query(question)
+        source_nodes = response.source_nodes
+        source_node_content = [
+            (node.text, node.metadata['file_path']) for node in source_nodes
+        ]
+        source_node_text = ''.join(
+            [
+                f'Context text: {content}\n From: {fpath} \n ------------ \n'
+                for content, fpath in source_node_content
+            ]
+        )
+
+        out = f"""Hypothesis_source: {dest}.hypo_ol \n
+                   ----------------------------- \n
+                   Hypothesis: {question} \n
+                   ----------------------------- \n
+                   Response: {response.response} \n
+                   ----------------------------- \n
+                   Source_nodes: \n
+                   {source_node_text} + \n
+                   ----------------------------- \n
+                   """
+        print(out)
 
 # # TODO: Make this query processing a generic function.
 
