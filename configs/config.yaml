@@ -1,8 +1,5 @@
-index_persist_dir: /rbstor/ac.ogokdemir/ragamp/indexes/lucid/faiss_index #index load-save
-papers_dir: /rbstor/ac.ogokdemir/md_outs #index build
 query_dir:  /home/ac.ogokdemir/ragamp/examples/hypo_ol_parsed.jsonl #query-input
 output_dir: /rbstor/ac.ogokdemir/ragamp/output/lucid_hypo_eval #query-output
-node_info_path: /rbstor/ac.ogokdemir/ragamp/output/lucid_hypo_eval/node_info.jsonl #index-build
 
 encoder_settings:
   model_name: pritamdeka/S-PubMedBert-MS-MARCO
@@ -14,3 +11,18 @@ encoder_settings:
 splitter_settings:
   buffer_size: 1
   include_metadata: true
+
+index_settings:
+  corpus_dir: /rbstor/ac.ogokdemir/ragamp/papers/lucid_papers
+  persist_dir: /rbstor/ac.ogokdemir/ragamp/indexes/lucid/faiss_index
+  node_info_path: /rbstor/ac.ogokdemir/ragamp/output/lucid_hypo_eval
+  num_workers: 8 #number of GPUs on node.
+  insert_batch_size: 16384
+  use_async: true
+  show_progress: true
+  encoder_settings:
+    model_name: pritamdeka/S-PubMedBert-MS-MARCO
+    tokenizer_name: pritamdeka/S-PubMedBert-MS-MARCO
+    max_length: 512
+    embed_batch_size: 64
+    cache_folder: /rbstor/ac.ogokdemir/hf_cache
