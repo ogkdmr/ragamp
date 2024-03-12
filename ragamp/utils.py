@@ -161,7 +161,7 @@ def timer(label: str):  # type: ignore[no-untyped-def]
 
 
 # Helper for saving the nodes metadata for reference.
-def cache_node_metadata(nodes: list[BaseNode], node_info_path: Path) -> None:
+def cache_node_metadata(nodes: list[BaseNode], node_info_path: str) -> None:
     """Writes the text content and metadata of the chunks in the index."""
     os.makedirs(node_info_path, exist_ok=True)
     with open(node_info_path, 'w') as f:
