@@ -154,4 +154,4 @@ def timer(label: str):  # type: ignore[no-untyped-def]
         yield
     finally:
         end = time.time()
-        logging.info(f'{label} took {end - start:.2f} seconds')
+        print(f'{label} took {end - start:.2f} seconds')
