@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import os
 import sys
 import time
 import traceback
@@ -15,6 +16,7 @@ from typing import TypeVar
 from typing import Union
 
 import yaml
+from llama_index.core.schema import BaseNode
 from pydantic import BaseModel as _BaseModel
 
 if sys.version_info >= (3, 10):
@@ -146,6 +148,7 @@ def setup_logging(logger_name: str, out_dir: Path) -> logging.Logger:
     return logger
 
 
+# Context manager for timing functions for logging purposes.
 @contextlib.contextmanager
 def timer(label: str):  # type: ignore[no-untyped-def]
     """Time a block of code."""
@@ -155,3 +158,17 @@ def timer(label: str):  # type: ignore[no-untyped-def]
     finally:
         end = time.time()
         print(f'{label} took {end - start:.2f} seconds')
+
+
+# Helper for saving the nodes metadata for reference.
+def cache_node_metadata(nodes: list[BaseNode], node_info_path: Path) -> None:
+    """Writes the text content and metadata of the chunks in the index."""
+    os.makedirs(node_info_path, exist_ok=True)
+    with open(node_info_path, 'w') as f:
+        for rank, node in enumerate(nodes, 1):
+            node_info = {
+                'rank': rank,
+                'content': node.get_content(),
+                'metadata': node.get_metadata_str(),
+            }
+            f.write(json.dumps(node_info) + '\n')
