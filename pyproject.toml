@@ -34,7 +34,7 @@ dependencies = [
     "llama-index-embeddings-huggingface",
     "llama-index-vector-stores-faiss",
     "faiss-gpu >= 1.7.0",
-
+    "types-PyYAML",
 ]
 
 [project.urls]
