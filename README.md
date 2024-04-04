@@ -1,4 +1,4 @@
-# RagAmp: Retrieval Augmented Generation for Antimicrobial Peptide Generation
+#Ragamp: Retrieval Augmented Generation for Antimicrobial Peptide Generation
 
 [![docs](https://github.com/ogkdmr/ragamp/actions/workflows/docs.yml/badge.svg)](https://github.com/ogkdmr/ragamp/actions)
 [![tests](https://github.com/ogkdmr/ragamp/actions/workflows/tests.yml/badge.svg)](https://github.com/ogkdmr/ragamp/actions)
